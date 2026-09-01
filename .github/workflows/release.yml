@@ -1,0 +1,62 @@
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-pc-windows-gnu
+            artifact: wcdb-key-win-x64.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: wcdb-key-mac-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: command -v x86_64-w64-mingw32-gcc >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+      - run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+      - run: |
+          f=wcdb-key
+          [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ] && f=wcdb-key.exe
+          mkdir -p dist && cp target/${{ matrix.target }}/release/$f dist/${{ matrix.artifact }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+      - run: |
+          gh release delete wcdb-key -y --repo ${{ github.repository }} || true
+          gh api -X DELETE repos/${{ github.repository }}/git/refs/tags/wcdb-key || true
+          gh release create wcdb-key dist/*/* --repo ${{ github.repository }} --target ${{ github.sha }} --notes ""
+  cleanup:
+    needs: release
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          for id in $(gh api repos/${{ github.repository }}/actions/runs --paginate --jq '.workflow_runs[] | select(.status=="completed") | .id'); do
+            gh api -X DELETE repos/${{ github.repository }}/actions/runs/$id || true
+          done

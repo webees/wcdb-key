@@ -1,0 +1,30 @@
+[package]
+name = "wcdb-key"
+version = "0.1.0"
+edition = "2021"
+description = "Extract the WeChat (4.x) WCDB database passphrase. macOS: LLDB software breakpoint on a temporarily re-signed app. Windows: in-memory feature scan. Local-only."
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+pbkdf2 = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ctrlc = "3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+] }
+memchr = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
